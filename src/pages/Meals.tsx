@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { mockWeeklyPlan } from "@/data/mockData";
+import { generateMealPlans, getCalorieTarget } from "@/utils/planGenerator";
 import { Utensils, Check, Flame, Apple, Beef, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -39,6 +39,7 @@ const Meals = () => {
   const { user } = useAuth();
   const [selectedDay, setSelectedDay] = useState<typeof weekDays[number]>("Monday");
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
+  const [profile, setProfile] = useState<{ fitness_goal: string | null; activity_level: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,6 +50,15 @@ const Meals = () => {
 
   const fetchMealPlans = async () => {
     try {
+      // First get the profile for personalization
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("fitness_goal, activity_level")
+        .eq("id", user?.id)
+        .maybeSingle();
+
+      setProfile(profileData);
+
       const { data, error } = await supabase
         .from("meal_plans")
         .select("*")
@@ -62,8 +72,8 @@ const Meals = () => {
           meals: plan.meals as unknown as Meal[]
         })));
       } else {
-        // Initialize with default meal plans
-        await initializeDefaultPlans();
+        // Initialize with personalized meal plans based on profile
+        await initializeDefaultPlans(profileData);
       }
     } catch (error) {
       console.error("Error fetching meal plans:", error);
@@ -72,9 +82,14 @@ const Meals = () => {
     }
   };
 
-  const initializeDefaultPlans = async () => {
+  const initializeDefaultPlans = async (profileData: { fitness_goal: string | null; activity_level: string | null } | null) => {
     try {
-      const defaultPlans = mockWeeklyPlan.map((day) => ({
+      const generatedPlans = generateMealPlans({
+        fitness_goal: profileData?.fitness_goal || "maintenance",
+        activity_level: profileData?.activity_level || "moderate"
+      });
+
+      const defaultPlans = generatedPlans.map((day) => ({
         user_id: user?.id as string,
         day_of_week: day.day,
         meals: JSON.parse(JSON.stringify(day.meals)),
@@ -102,7 +117,10 @@ const Meals = () => {
   const consumedMeals = todayPlan?.meals.filter((m) => m.consumed) || [];
   const totalCalories = todayPlan?.meals.reduce((sum, m) => sum + m.calories, 0) || 0;
   const consumedCalories = consumedMeals.reduce((sum, m) => sum + m.calories, 0);
-  const targetCalories = 2400;
+  const targetCalories = getCalorieTarget({
+    fitness_goal: profile?.fitness_goal || "maintenance",
+    activity_level: profile?.activity_level || "moderate"
+  });
 
   const totalMacros = todayPlan?.meals.reduce(
     (acc, m) => ({

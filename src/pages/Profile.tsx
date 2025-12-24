@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Target, Ruler, Scale, Calendar, Save, Check, Loader2 } from "lucide-react";
+import { generateWorkoutPlans, generateMealPlans } from "@/utils/planGenerator";
+import { User, Target, Ruler, Scale, Calendar, Save, Check, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 const goals = [
@@ -26,6 +27,8 @@ const Profile = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [originalGoal, setOriginalGoal] = useState("");
   const [profile, setProfile] = useState({
     name: "",
     age: 0,
@@ -52,14 +55,16 @@ const Profile = () => {
       if (error) throw error;
 
       if (data) {
-        setProfile({
+        const profileData = {
           name: data.name || "",
           age: data.age || 0,
           height: Number(data.height) || 0,
           weight: Number(data.weight) || 0,
           fitness_goal: data.fitness_goal || "maintenance",
           activity_level: data.activity_level || "moderate",
-        });
+        };
+        setProfile(profileData);
+        setOriginalGoal(data.fitness_goal || "maintenance");
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -87,14 +92,70 @@ const Profile = () => {
 
       if (error) throw error;
 
-      toast.success("Profile updated successfully!", {
-        description: "Your fitness plan will be adjusted based on your new goals.",
-      });
+      // If fitness goal changed, offer to regenerate plans
+      if (originalGoal !== profile.fitness_goal) {
+        toast.success("Profile updated!", {
+          description: "Your goal changed. Click 'Regenerate Plans' to update your workout and meal plans.",
+          duration: 6000,
+        });
+        setOriginalGoal(profile.fitness_goal);
+      } else {
+        toast.success("Profile updated successfully!");
+      }
     } catch (error) {
       console.error("Error saving profile:", error);
       toast.error("Failed to save profile. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const regeneratePlans = async () => {
+    if (!user) return;
+    setRegenerating(true);
+
+    try {
+      // Delete existing plans
+      await supabase.from("workout_plans").delete().eq("user_id", user.id);
+      await supabase.from("meal_plans").delete().eq("user_id", user.id);
+
+      // Generate new workout plans
+      const workoutPlans = generateWorkoutPlans({
+        fitness_goal: profile.fitness_goal,
+        activity_level: profile.activity_level,
+      });
+
+      const workoutData = workoutPlans.map((day) => ({
+        user_id: user.id,
+        day_of_week: day.day,
+        exercises: JSON.parse(JSON.stringify(day.exercises)),
+        completed: false,
+      }));
+
+      await supabase.from("workout_plans").insert(workoutData);
+
+      // Generate new meal plans
+      const mealPlans = generateMealPlans({
+        fitness_goal: profile.fitness_goal,
+        activity_level: profile.activity_level,
+      });
+
+      const mealData = mealPlans.map((day) => ({
+        user_id: user.id,
+        day_of_week: day.day,
+        meals: JSON.parse(JSON.stringify(day.meals)),
+      }));
+
+      await supabase.from("meal_plans").insert(mealData);
+
+      toast.success("Plans regenerated!", {
+        description: `Your workout and meal plans are now optimized for ${profile.fitness_goal.replace("_", " ")}.`,
+      });
+    } catch (error) {
+      console.error("Error regenerating plans:", error);
+      toast.error("Failed to regenerate plans. Please try again.");
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -251,9 +312,22 @@ const Profile = () => {
               </CardContent>
             </Card>
 
-            {/* Save Button */}
-            <div className="flex justify-end animate-slide-up" style={{ animationDelay: "300ms" }}>
-              <Button variant="hero" size="lg" onClick={handleSave} disabled={saving}>
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row justify-end gap-3 animate-slide-up" style={{ animationDelay: "300ms" }}>
+              <Button 
+                variant="outline" 
+                size="lg" 
+                onClick={regeneratePlans} 
+                disabled={regenerating || saving}
+              >
+                {regenerating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-5 h-5" />
+                )}
+                {regenerating ? "Regenerating..." : "Regenerate Plans"}
+              </Button>
+              <Button variant="hero" size="lg" onClick={handleSave} disabled={saving || regenerating}>
                 {saving ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (

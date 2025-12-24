@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { mockWeeklyPlan } from "@/data/mockData";
+import { generateWorkoutPlans } from "@/utils/planGenerator";
 import { Dumbbell, Check, Clock, Flame, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -42,6 +42,13 @@ const Workouts = () => {
 
   const fetchWorkoutPlans = async () => {
     try {
+      // First get the profile for personalization
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("fitness_goal, activity_level")
+        .eq("id", user?.id)
+        .maybeSingle();
+
       const { data, error } = await supabase
         .from("workout_plans")
         .select("*")
@@ -55,8 +62,8 @@ const Workouts = () => {
           exercises: plan.exercises as unknown as Exercise[]
         })));
       } else {
-        // Initialize with default workout plans
-        await initializeDefaultPlans();
+        // Initialize with personalized workout plans based on profile
+        await initializeDefaultPlans(profileData);
       }
     } catch (error) {
       console.error("Error fetching workout plans:", error);
@@ -65,9 +72,14 @@ const Workouts = () => {
     }
   };
 
-  const initializeDefaultPlans = async () => {
+  const initializeDefaultPlans = async (profile: { fitness_goal: string | null; activity_level: string | null } | null) => {
     try {
-      const defaultPlans = mockWeeklyPlan.map((day) => ({
+      const generatedPlans = generateWorkoutPlans({
+        fitness_goal: profile?.fitness_goal || "maintenance",
+        activity_level: profile?.activity_level || "moderate"
+      });
+
+      const defaultPlans = generatedPlans.map((day) => ({
         user_id: user?.id as string,
         day_of_week: day.day,
         exercises: JSON.parse(JSON.stringify(day.exercises)),
