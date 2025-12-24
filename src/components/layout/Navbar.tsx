@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Dumbbell, User, Utensils, TrendingUp, Menu, X } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Dumbbell, User, Utensils, TrendingUp, Menu, X, LogOut, LogIn } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
@@ -12,7 +13,13 @@ const navItems = [
 
 export const Navbar = () => {
   const location = useLocation();
+  const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setMobileOpen(false);
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass border-b border-border/50">
@@ -28,7 +35,7 @@ export const Navbar = () => {
 
         {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-2">
-          {navItems.map((item) => {
+          {user && navItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Link key={item.path} to={item.path}>
@@ -43,6 +50,25 @@ export const Navbar = () => {
               </Link>
             );
           })}
+          
+          {user ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSignOut}
+              className="gap-2 ml-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
+          ) : (
+            <Link to="/auth">
+              <Button variant="hero" size="sm" className="gap-2 ml-2">
+                <LogIn className="w-4 h-4" />
+                Login
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Mobile Menu Button */}
@@ -60,7 +86,7 @@ export const Navbar = () => {
       {mobileOpen && (
         <div className="md:hidden glass border-t border-border/50 animate-slide-up">
           <div className="container mx-auto px-4 py-4 flex flex-col gap-2">
-            {navItems.map((item) => {
+            {user && navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
                 <Link
@@ -78,6 +104,24 @@ export const Navbar = () => {
                 </Link>
               );
             })}
+            
+            {user ? (
+              <Button
+                variant="ghost"
+                onClick={handleSignOut}
+                className="w-full justify-start gap-3"
+              >
+                <LogOut className="w-5 h-5" />
+                Logout
+              </Button>
+            ) : (
+              <Link to="/auth" onClick={() => setMobileOpen(false)}>
+                <Button variant="hero" className="w-full justify-start gap-3">
+                  <LogIn className="w-5 h-5" />
+                  Login
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       )}

@@ -1,25 +1,104 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { mockWeeklyPlan } from "@/data/mockData";
-import { Utensils, Check, Flame, Apple, Beef, Droplet, ChevronRight } from "lucide-react";
+import { Utensils, Check, Flame, Apple, Beef, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
-const mealTypeIcons = {
+const mealTypeIcons: Record<string, string> = {
   breakfast: "🌅",
   lunch: "☀️",
   dinner: "🌙",
   snack: "🍎",
 };
 
-const Meals = () => {
-  const [selectedDay, setSelectedDay] = useState<typeof weekDays[number]>("Monday");
-  const [meals, setMeals] = useState(mockWeeklyPlan);
+interface Meal {
+  id: string;
+  name: string;
+  type: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  consumed: boolean;
+}
 
-  const todayPlan = meals.find((p) => p.day === selectedDay);
+interface MealPlan {
+  id: string;
+  day_of_week: string;
+  meals: Meal[];
+}
+
+const Meals = () => {
+  const { user } = useAuth();
+  const [selectedDay, setSelectedDay] = useState<typeof weekDays[number]>("Monday");
+  const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchMealPlans();
+    }
+  }, [user]);
+
+  const fetchMealPlans = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("meal_plans")
+        .select("*")
+        .eq("user_id", user?.id);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setMealPlans(data.map(plan => ({
+          ...plan,
+          meals: plan.meals as unknown as Meal[]
+        })));
+      } else {
+        // Initialize with default meal plans
+        await initializeDefaultPlans();
+      }
+    } catch (error) {
+      console.error("Error fetching meal plans:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const initializeDefaultPlans = async () => {
+    try {
+      const defaultPlans = mockWeeklyPlan.map((day) => ({
+        user_id: user?.id as string,
+        day_of_week: day.day,
+        meals: JSON.parse(JSON.stringify(day.meals)),
+      }));
+
+      const { data, error } = await supabase
+        .from("meal_plans")
+        .insert(defaultPlans)
+        .select();
+
+      if (error) throw error;
+
+      if (data) {
+        setMealPlans(data.map(plan => ({
+          ...plan,
+          meals: plan.meals as unknown as Meal[]
+        })));
+      }
+    } catch (error) {
+      console.error("Error initializing meal plans:", error);
+    }
+  };
+
+  const todayPlan = mealPlans.find((p) => p.day_of_week === selectedDay);
   const consumedMeals = todayPlan?.meals.filter((m) => m.consumed) || [];
   const totalCalories = todayPlan?.meals.reduce((sum, m) => sum + m.calories, 0) || 0;
   const consumedCalories = consumedMeals.reduce((sum, m) => sum + m.calories, 0);
@@ -34,16 +113,45 @@ const Meals = () => {
     { protein: 0, carbs: 0, fat: 0 }
   ) || { protein: 0, carbs: 0, fat: 0 };
 
-  const toggleMeal = (mealId: string) => {
-    setMeals((prev) =>
-      prev.map((day) => ({
-        ...day,
-        meals: day.meals.map((meal) =>
-          meal.id === mealId ? { ...meal, consumed: !meal.consumed } : meal
-        ),
-      }))
+  const toggleMeal = async (mealId: string) => {
+    if (!todayPlan) return;
+
+    const updatedMeals = todayPlan.meals.map((meal) =>
+      meal.id === mealId ? { ...meal, consumed: !meal.consumed } : meal
     );
+
+    // Optimistic update
+    setMealPlans((prev) =>
+      prev.map((plan) =>
+        plan.id === todayPlan.id
+          ? { ...plan, meals: updatedMeals }
+          : plan
+      )
+    );
+
+    try {
+      const { error } = await supabase
+        .from("meal_plans")
+        .update({ meals: JSON.parse(JSON.stringify(updatedMeals)) })
+        .eq("id", todayPlan.id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error updating meal:", error);
+      toast.error("Failed to save. Please try again.");
+      fetchMealPlans();
+    }
   };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -158,7 +266,7 @@ const Meals = () => {
                       {meal.consumed ? (
                         <Check className="w-5 h-5 text-primary-foreground" />
                       ) : (
-                        <span className="text-lg">{mealTypeIcons[meal.type]}</span>
+                        <span className="text-lg">{mealTypeIcons[meal.type] || "🍽️"}</span>
                       )}
                     </button>
 
@@ -192,6 +300,16 @@ const Meals = () => {
                 </CardContent>
               </Card>
             ))}
+
+            {(!todayPlan || todayPlan.meals.length === 0) && (
+              <Card variant="gradient" className="animate-slide-up">
+                <CardContent className="p-12 text-center">
+                  <Utensils className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="font-display font-bold text-xl mb-2">No Meals Planned</h3>
+                  <p className="text-muted-foreground">No meals scheduled for {selectedDay} yet.</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

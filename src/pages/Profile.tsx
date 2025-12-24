@@ -1,35 +1,112 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { mockUser } from "@/data/mockData";
-import { FitnessGoal } from "@/types/fitness";
-import { User, Target, Ruler, Scale, Calendar, Save, Check } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { User, Target, Ruler, Scale, Calendar, Save, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const goals: { value: FitnessGoal; label: string; description: string }[] = [
+const goals = [
   { value: "weight_loss", label: "Weight Loss", description: "Burn fat and slim down" },
   { value: "muscle_gain", label: "Muscle Gain", description: "Build strength and size" },
   { value: "maintenance", label: "Maintenance", description: "Stay fit and healthy" },
 ];
 
+const activityLevels = [
+  { value: "sedentary", label: "Sedentary" },
+  { value: "light", label: "Lightly Active" },
+  { value: "moderate", label: "Moderately Active" },
+  { value: "active", label: "Very Active" },
+];
+
 const Profile = () => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState({
-    name: mockUser.name,
-    age: mockUser.age,
-    gender: mockUser.gender,
-    height: mockUser.height,
-    weight: mockUser.weight,
-    goal: mockUser.goal,
+    name: "",
+    age: 0,
+    height: 0,
+    weight: 0,
+    fitness_goal: "maintenance",
+    activity_level: "moderate",
   });
 
-  const handleSave = () => {
-    toast.success("Profile updated successfully!", {
-      description: "Your fitness plan will be adjusted based on your new goals.",
-    });
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
+
+  const fetchProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user?.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setProfile({
+          name: data.name || "",
+          age: data.age || 0,
+          height: Number(data.height) || 0,
+          weight: Number(data.weight) || 0,
+          fitness_goal: data.fitness_goal || "maintenance",
+          activity_level: data.activity_level || "moderate",
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          name: profile.name,
+          age: profile.age || null,
+          height: profile.height || null,
+          weight: profile.weight || null,
+          fitness_goal: profile.fitness_goal,
+          activity_level: profile.activity_level,
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      toast.success("Profile updated successfully!", {
+        description: "Your fitness plan will be adjusted based on your new goals.",
+      });
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      toast.error("Failed to save profile. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -78,31 +155,15 @@ const Profile = () => {
                         id="age"
                         type="number"
                         className="pl-10"
-                        value={profile.age}
-                        onChange={(e) => setProfile({ ...profile, age: parseInt(e.target.value) })}
+                        value={profile.age || ""}
+                        onChange={(e) => setProfile({ ...profile, age: parseInt(e.target.value) || 0 })}
+                        placeholder="Your age"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Gender</Label>
-                    <div className="flex gap-2">
-                      {(["male", "female", "other"] as const).map((g) => (
-                        <Button
-                          key={g}
-                          type="button"
-                          variant={profile.gender === g ? "default" : "outline"}
-                          size="sm"
-                          className="flex-1 capitalize"
-                          onClick={() => setProfile({ ...profile, gender: g })}
-                        >
-                          {g}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="height">Height (cm)</Label>
                     <div className="relative">
@@ -111,8 +172,9 @@ const Profile = () => {
                         id="height"
                         type="number"
                         className="pl-10"
-                        value={profile.height}
-                        onChange={(e) => setProfile({ ...profile, height: parseInt(e.target.value) })}
+                        value={profile.height || ""}
+                        onChange={(e) => setProfile({ ...profile, height: parseInt(e.target.value) || 0 })}
+                        placeholder="Height in cm"
                       />
                     </div>
                   </div>
@@ -124,10 +186,28 @@ const Profile = () => {
                         id="weight"
                         type="number"
                         className="pl-10"
-                        value={profile.weight}
-                        onChange={(e) => setProfile({ ...profile, weight: parseInt(e.target.value) })}
+                        value={profile.weight || ""}
+                        onChange={(e) => setProfile({ ...profile, weight: parseInt(e.target.value) || 0 })}
+                        placeholder="Weight in kg"
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Activity Level</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {activityLevels.map((level) => (
+                      <Button
+                        key={level.value}
+                        type="button"
+                        variant={profile.activity_level === level.value ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setProfile({ ...profile, activity_level: level.value })}
+                      >
+                        {level.label}
+                      </Button>
+                    ))}
                   </div>
                 </div>
               </CardContent>
@@ -151,14 +231,14 @@ const Profile = () => {
                   {goals.map((goal) => (
                     <button
                       key={goal.value}
-                      onClick={() => setProfile({ ...profile, goal: goal.value })}
+                      onClick={() => setProfile({ ...profile, fitness_goal: goal.value })}
                       className={`relative p-6 rounded-xl border-2 text-left transition-all duration-300 ${
-                        profile.goal === goal.value
+                        profile.fitness_goal === goal.value
                           ? "border-primary bg-primary/10 shadow-glow"
                           : "border-border bg-card hover:border-primary/50"
                       }`}
                     >
-                      {profile.goal === goal.value && (
+                      {profile.fitness_goal === goal.value && (
                         <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-primary flex items-center justify-center">
                           <Check className="w-4 h-4 text-primary-foreground" />
                         </div>
@@ -173,9 +253,13 @@ const Profile = () => {
 
             {/* Save Button */}
             <div className="flex justify-end animate-slide-up" style={{ animationDelay: "300ms" }}>
-              <Button variant="hero" size="lg" onClick={handleSave}>
-                <Save className="w-5 h-5" />
-                Save Changes
+              <Button variant="hero" size="lg" onClick={handleSave} disabled={saving}>
+                {saving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Save className="w-5 h-5" />
+                )}
+                {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </div>
