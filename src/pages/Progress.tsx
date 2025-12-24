@@ -18,7 +18,7 @@ interface ProgressEntry {
 const Progress = () => {
   const { user } = useAuth();
   const [progressHistory, setProgressHistory] = useState<ProgressEntry[]>([]);
-  const [profile, setProfile] = useState<{ fitness_goal: string } | null>(null);
+  const [profile, setProfile] = useState<{ fitness_goal: string; weight: number | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,23 +38,24 @@ const Progress = () => {
 
       if (progressError) throw progressError;
 
-      // Fetch profile for goal
+      // Fetch profile for goal and weight
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("fitness_goal")
+        .select("fitness_goal, weight")
         .eq("id", user?.id)
         .maybeSingle();
 
       if (profileError) throw profileError;
 
+      setProfile(profileData);
+
       if (progressData && progressData.length > 0) {
         setProgressHistory(progressData);
       } else {
-        // Initialize with sample data for new users
-        await initializeSampleProgress();
+        // Initialize with sample data for new users using profile weight
+        await initializeSampleProgress(profileData?.weight);
       }
 
-      setProfile(profileData);
     } catch (error) {
       console.error("Error fetching progress data:", error);
     } finally {
@@ -62,18 +63,20 @@ const Progress = () => {
     }
   };
 
-  const initializeSampleProgress = async () => {
+  const initializeSampleProgress = async (profileWeight?: number | null) => {
     const today = new Date();
     const sampleData = [];
+    const baseWeight = profileWeight ? Number(profileWeight) : 75;
     
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       
+      // Small weight fluctuations from profile weight
       sampleData.push({
         user_id: user?.id,
         date: date.toISOString().split("T")[0],
-        weight: 75 + Math.random() * 2 - 1,
+        weight: baseWeight + (Math.random() * 1 - 0.5),
         calories_consumed: 1800 + Math.floor(Math.random() * 600),
         calories_burned: 200 + Math.floor(Math.random() * 300),
         workouts_completed: Math.floor(Math.random() * 4),
