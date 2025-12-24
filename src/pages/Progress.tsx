@@ -1,34 +1,120 @@
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockProgressHistory, mockUser } from "@/data/mockData";
-import { TrendingUp, TrendingDown, Scale, Flame, Dumbbell, Target } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { TrendingUp, TrendingDown, Scale, Flame, Dumbbell, Target, Loader2 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 
+interface ProgressEntry {
+  id: string;
+  date: string;
+  weight: number | null;
+  calories_consumed: number | null;
+  calories_burned: number | null;
+  workouts_completed: number;
+}
+
 const Progress = () => {
-  const chartData = mockProgressHistory.map((entry) => ({
-    date: entry.date.toLocaleDateString("en-US", { weekday: "short" }),
-    weight: entry.weight,
-    calories: entry.caloriesConsumed,
-    target: entry.caloriesTarget,
-    exerciseRate: Math.round((entry.exercisesCompleted / entry.exercisesTotal) * 100),
+  const { user } = useAuth();
+  const [progressHistory, setProgressHistory] = useState<ProgressEntry[]>([]);
+  const [profile, setProfile] = useState<{ fitness_goal: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  const fetchData = async () => {
+    try {
+      // Fetch progress entries
+      const { data: progressData, error: progressError } = await supabase
+        .from("progress_entries")
+        .select("*")
+        .eq("user_id", user?.id)
+        .order("date", { ascending: true });
+
+      if (progressError) throw progressError;
+
+      // Fetch profile for goal
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("fitness_goal")
+        .eq("id", user?.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (progressData && progressData.length > 0) {
+        setProgressHistory(progressData);
+      } else {
+        // Initialize with sample data for new users
+        await initializeSampleProgress();
+      }
+
+      setProfile(profileData);
+    } catch (error) {
+      console.error("Error fetching progress data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const initializeSampleProgress = async () => {
+    const today = new Date();
+    const sampleData = [];
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      
+      sampleData.push({
+        user_id: user?.id,
+        date: date.toISOString().split("T")[0],
+        weight: 75 + Math.random() * 2 - 1,
+        calories_consumed: 1800 + Math.floor(Math.random() * 600),
+        calories_burned: 200 + Math.floor(Math.random() * 300),
+        workouts_completed: Math.floor(Math.random() * 4),
+      });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("progress_entries")
+        .insert(sampleData)
+        .select();
+
+      if (error) throw error;
+      if (data) setProgressHistory(data);
+    } catch (error) {
+      console.error("Error initializing sample progress:", error);
+    }
+  };
+
+  const chartData = progressHistory.map((entry) => ({
+    date: new Date(entry.date).toLocaleDateString("en-US", { weekday: "short" }),
+    weight: Number(entry.weight) || 0,
+    calories: entry.calories_consumed || 0,
+    target: 2200,
+    exerciseRate: (entry.workouts_completed / 4) * 100,
   }));
 
-  const latestWeight = mockProgressHistory[mockProgressHistory.length - 1]?.weight || 0;
-  const startWeight = mockProgressHistory[0]?.weight || 0;
-  const weightChange = startWeight - latestWeight;
-  const avgCalories = Math.round(
-    mockProgressHistory.reduce((sum, e) => sum + e.caloriesConsumed, 0) / mockProgressHistory.length
-  );
-  const avgExerciseCompletion = Math.round(
-    (mockProgressHistory.reduce((sum, e) => sum + e.exercisesCompleted, 0) /
-      mockProgressHistory.reduce((sum, e) => sum + e.exercisesTotal, 0)) *
-      100
-  );
+  const latestWeight = progressHistory[progressHistory.length - 1]?.weight || 0;
+  const startWeight = progressHistory[0]?.weight || 0;
+  const weightChange = Number(startWeight) - Number(latestWeight);
+  const avgCalories = progressHistory.length > 0
+    ? Math.round(progressHistory.reduce((sum, e) => sum + (e.calories_consumed || 0), 0) / progressHistory.length)
+    : 0;
+  const avgWorkouts = progressHistory.length > 0
+    ? Math.round((progressHistory.reduce((sum, e) => sum + e.workouts_completed, 0) / progressHistory.length) * 25)
+    : 0;
 
   const stats = [
     {
       label: "Current Weight",
-      value: `${latestWeight} kg`,
+      value: `${Number(latestWeight).toFixed(1)} kg`,
       change: weightChange > 0 ? `-${weightChange.toFixed(1)} kg` : `+${Math.abs(weightChange).toFixed(1)} kg`,
       trend: weightChange > 0 ? "down" : "up",
       icon: Scale,
@@ -46,16 +132,16 @@ const Progress = () => {
     },
     {
       label: "Workout Rate",
-      value: `${avgExerciseCompletion}%`,
+      value: `${avgWorkouts}%`,
       change: "completion",
-      trend: avgExerciseCompletion >= 80 ? "up" : "neutral",
+      trend: avgWorkouts >= 80 ? "up" : "neutral",
       icon: Dumbbell,
       color: "text-primary",
       bgColor: "bg-primary/10",
     },
     {
       label: "Goal",
-      value: mockUser.goal.replace("_", " "),
+      value: (profile?.fitness_goal || "maintenance").replace("_", " "),
       change: "active",
       trend: "neutral",
       icon: Target,
@@ -63,6 +149,16 @@ const Progress = () => {
       bgColor: "bg-accent/10",
     },
   ];
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

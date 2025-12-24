@@ -1,32 +1,147 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { mockWeeklyPlan } from "@/data/mockData";
-import { Dumbbell, Check, Clock, Flame, ChevronRight } from "lucide-react";
+import { Dumbbell, Check, Clock, Flame, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
-const Workouts = () => {
-  const [selectedDay, setSelectedDay] = useState<typeof weekDays[number]>("Monday");
-  const [exercises, setExercises] = useState(mockWeeklyPlan);
+interface Exercise {
+  id: string;
+  name: string;
+  description: string;
+  sets: number;
+  reps: number;
+  duration?: number;
+  completed: boolean;
+}
 
-  const todayPlan = exercises.find((p) => p.day === selectedDay);
+interface WorkoutPlan {
+  id: string;
+  day_of_week: string;
+  exercises: Exercise[];
+  completed: boolean;
+}
+
+const Workouts = () => {
+  const { user } = useAuth();
+  const [selectedDay, setSelectedDay] = useState<typeof weekDays[number]>("Monday");
+  const [workoutPlans, setWorkoutPlans] = useState<WorkoutPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchWorkoutPlans();
+    }
+  }, [user]);
+
+  const fetchWorkoutPlans = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("workout_plans")
+        .select("*")
+        .eq("user_id", user?.id);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setWorkoutPlans(data.map(plan => ({
+          ...plan,
+          exercises: plan.exercises as unknown as Exercise[]
+        })));
+      } else {
+        // Initialize with default workout plans
+        await initializeDefaultPlans();
+      }
+    } catch (error) {
+      console.error("Error fetching workout plans:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const initializeDefaultPlans = async () => {
+    try {
+      const defaultPlans = mockWeeklyPlan.map((day) => ({
+        user_id: user?.id as string,
+        day_of_week: day.day,
+        exercises: JSON.parse(JSON.stringify(day.exercises)),
+        completed: false,
+      }));
+
+      const { data, error } = await supabase
+        .from("workout_plans")
+        .insert(defaultPlans)
+        .select();
+
+      if (error) throw error;
+
+      if (data) {
+        setWorkoutPlans(data.map(plan => ({
+          ...plan,
+          exercises: plan.exercises as unknown as Exercise[]
+        })));
+      }
+    } catch (error) {
+      console.error("Error initializing workout plans:", error);
+    }
+  };
+
+  const todayPlan = workoutPlans.find((p) => p.day_of_week === selectedDay);
   const completedCount = todayPlan?.exercises.filter((e) => e.completed).length || 0;
   const totalCount = todayPlan?.exercises.length || 0;
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
-  const toggleExercise = (exerciseId: string) => {
-    setExercises((prev) =>
-      prev.map((day) => ({
-        ...day,
-        exercises: day.exercises.map((ex) =>
-          ex.id === exerciseId ? { ...ex, completed: !ex.completed } : ex
-        ),
-      }))
+  const toggleExercise = async (exerciseId: string) => {
+    if (!todayPlan) return;
+
+    const updatedExercises = todayPlan.exercises.map((ex) =>
+      ex.id === exerciseId ? { ...ex, completed: !ex.completed } : ex
     );
+
+    // Optimistic update
+    setWorkoutPlans((prev) =>
+      prev.map((plan) =>
+        plan.id === todayPlan.id
+          ? { ...plan, exercises: updatedExercises }
+          : plan
+      )
+    );
+
+    try {
+      const { error } = await supabase
+        .from("workout_plans")
+        .update({ exercises: JSON.parse(JSON.stringify(updatedExercises)) })
+        .eq("id", todayPlan.id);
+
+      if (error) throw error;
+
+      const allCompleted = updatedExercises.every((e) => e.completed);
+      if (allCompleted && totalCount > 0) {
+        toast.success("Great job! You completed all exercises for today! 💪");
+      }
+    } catch (error) {
+      console.error("Error updating exercise:", error);
+      toast.error("Failed to save. Please try again.");
+      // Revert on error
+      fetchWorkoutPlans();
+    }
   };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -46,7 +161,7 @@ const Workouts = () => {
           <div className="mb-8 overflow-x-auto animate-slide-up" style={{ animationDelay: "100ms" }}>
             <div className="flex gap-2 min-w-max pb-2">
               {weekDays.map((day) => {
-                const dayPlan = exercises.find((p) => p.day === day);
+                const dayPlan = workoutPlans.find((p) => p.day_of_week === day);
                 const dayCompleted = dayPlan?.exercises.filter((e) => e.completed).length || 0;
                 const dayTotal = dayPlan?.exercises.length || 0;
                 const isComplete = dayTotal > 0 && dayCompleted === dayTotal;
@@ -165,6 +280,16 @@ const Workouts = () => {
                 </CardContent>
               </Card>
             ))}
+
+            {(!todayPlan || todayPlan.exercises.length === 0) && (
+              <Card variant="gradient" className="animate-slide-up">
+                <CardContent className="p-12 text-center">
+                  <Dumbbell className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="font-display font-bold text-xl mb-2">Rest Day</h3>
+                  <p className="text-muted-foreground">No workouts scheduled for {selectedDay}. Take it easy!</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
