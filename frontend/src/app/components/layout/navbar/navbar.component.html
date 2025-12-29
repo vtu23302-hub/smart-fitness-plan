@@ -1,0 +1,22 @@
+<mat-toolbar color="primary">
+  <span style="cursor: pointer;" (click)="navigateTo('/profile')">
+    Smart Fitness
+  </span>
+  <span class="spacer"></span>
+  <button mat-button (click)="navigateTo('/profile')">
+    <mat-icon>person</mat-icon> Profile
+  </button>
+  <button mat-button (click)="navigateTo('/workouts')">
+    <mat-icon>fitness_center</mat-icon> Workouts
+  </button>
+  <button mat-button (click)="navigateTo('/meals')">
+    <mat-icon>restaurant</mat-icon> Meals
+  </button>
+  <button mat-button (click)="navigateTo('/progress')">
+    <mat-icon>trending_up</mat-icon> Progress
+  </button>
+  <button mat-button (click)="logout()">
+    <mat-icon>logout</mat-icon> Logout
+  </button>
+</mat-toolbar>
+

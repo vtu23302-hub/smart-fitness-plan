@@ -1,0 +1,76 @@
+<div *ngIf="loading" style="text-align: center; padding: 40px;">
+  <mat-spinner></mat-spinner>
+</div>
+
+<div *ngIf="!loading">
+  <h1>Meal Planner</h1>
+  <p>Your personalized nutrition plan with calorie tracking</p>
+
+  <div style="display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap;">
+    <button
+      *ngFor="let day of weekDays"
+      mat-raised-button
+      [color]="selectedDay === day ? 'primary' : ''"
+      (click)="selectedDay = day">
+      {{ day.slice(0, 3) }}
+    </button>
+  </div>
+
+  <mat-card *ngIf="getSelectedPlan() as plan">
+    <mat-card-header>
+      <mat-card-title>{{ selectedDay }}'s Meals</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+        <mat-card>
+          <mat-card-content>
+            <h3>Calories</h3>
+            <h2>{{ getConsumedCalories(plan) }} / {{ getTotalCalories(plan) }} kcal</h2>
+            <mat-progress-bar mode="determinate" [value]="(getConsumedCalories(plan) / getTotalCalories(plan)) * 100"></mat-progress-bar>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+          <mat-card-content>
+            <h3>Protein</h3>
+            <h2>{{ getTotalMacros(plan).protein }}g</h2>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+          <mat-card-content>
+            <h3>Carbs</h3>
+            <h2>{{ getTotalMacros(plan).carbs }}g</h2>
+          </mat-card-content>
+        </mat-card>
+      </div>
+
+      <div>
+        <mat-card *ngFor="let meal of plan.meals" style="margin-bottom: 15px; cursor: pointer;" (click)="toggleMeal(meal)">
+          <mat-card-content>
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <mat-checkbox [checked]="meal.consumed" (change)="toggleMeal(meal)"></mat-checkbox>
+              <div style="font-size: 24px;">{{ mealTypeIcons[meal.type] || '🍽️' }}</div>
+              <div style="flex: 1;">
+                <span style="font-size: 0.75rem; text-transform: uppercase; color: #666;">{{ meal.type }}</span>
+                <h3 [style.text-decoration]="meal.consumed ? 'line-through' : 'none'">{{ meal.name }}</h3>
+                <div style="display: flex; gap: 15px; margin-top: 10px;">
+                  <span class="chip">{{ meal.calories }} kcal</span>
+                  <span class="chip">P: {{ meal.protein }}g</span>
+                  <span class="chip">C: {{ meal.carbs }}g</span>
+                  <span class="chip">F: {{ meal.fat }}g</span>
+                </div>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card *ngIf="plan.meals.length === 0" style="text-align: center; padding: 40px;">
+          <h3>No Meals Planned</h3>
+          <p>No meals scheduled for {{ selectedDay }} yet.</p>
+        </mat-card>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>
+

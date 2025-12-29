@@ -1,0 +1,59 @@
+<div *ngIf="loading" style="text-align: center; padding: 40px;">
+  <mat-spinner></mat-spinner>
+</div>
+
+<div *ngIf="!loading">
+  <h1>Workout Routines</h1>
+  <p>Your personalized weekly workout plan</p>
+
+  <div style="display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap;">
+    <button
+      *ngFor="let day of weekDays"
+      mat-raised-button
+      [color]="selectedDay === day ? 'primary' : ''"
+      (click)="selectedDay = day"
+      style="position: relative;">
+      {{ day.slice(0, 3) }}
+      <mat-icon *ngIf="isDayComplete(day)" style="position: absolute; top: -5px; right: -5px; font-size: 16px; width: 16px; height: 16px;">
+        check_circle
+      </mat-icon>
+    </button>
+  </div>
+
+  <mat-card *ngIf="getSelectedPlan() as plan">
+    <mat-card-header>
+      <mat-card-title>{{ selectedDay }}'s Workout</mat-card-title>
+      <mat-card-subtitle>
+        {{ plan.exercises.filter(e => e.completed).length }} of {{ plan.exercises.length }} exercises completed
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-progress-bar mode="determinate" [value]="getProgress(plan)"></mat-progress-bar>
+      <p style="text-align: center; margin-top: 10px;">{{ getProgress(plan).toFixed(0) }}% Complete</p>
+
+      <div style="margin-top: 30px;">
+        <mat-card *ngFor="let exercise of plan.exercises" style="margin-bottom: 15px; cursor: pointer;" (click)="toggleExercise(exercise)">
+          <mat-card-content>
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <mat-checkbox [checked]="exercise.completed" (change)="toggleExercise(exercise)"></mat-checkbox>
+              <div style="flex: 1;">
+                <h3 [style.text-decoration]="exercise.completed ? 'line-through' : 'none'">{{ exercise.name }}</h3>
+                <p style="color: #666; margin: 5px 0;">{{ exercise.description }}</p>
+                <div style="display: flex; gap: 15px; margin-top: 10px;">
+                  <span *ngIf="exercise.sets > 0" class="chip">{{ exercise.sets }} × {{ exercise.reps }}</span>
+                  <span *ngIf="exercise.duration" class="chip">{{ exercise.duration }} min</span>
+                </div>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card *ngIf="plan.exercises.length === 0" style="text-align: center; padding: 40px;">
+          <h3>Rest Day</h3>
+          <p>No workouts scheduled for {{ selectedDay }}. Take it easy!</p>
+        </mat-card>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>
+

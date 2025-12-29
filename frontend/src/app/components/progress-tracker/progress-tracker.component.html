@@ -1,0 +1,84 @@
+<div *ngIf="loading" style="text-align: center; padding: 40px;">
+  <mat-spinner></mat-spinner>
+</div>
+
+<div *ngIf="!loading">
+  <h1>Progress Tracker</h1>
+  <p>Track your fitness journey with detailed analytics</p>
+
+  <div *ngIf="stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">
+    <mat-card>
+      <mat-card-content>
+        <h3>Current Weight</h3>
+        <h2>{{ stats.current_weight }} kg</h2>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-content>
+        <h3>Goal</h3>
+        <h2 style="text-transform: capitalize;">{{ stats.goal?.replace('_', ' ') }}</h2>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-content>
+        <h3>Exercise Completion</h3>
+        <h2>{{ stats.exercise_completion_rate.toFixed(0) }}%</h2>
+        <p>{{ stats.total_exercises_completed }} / {{ stats.total_exercises }} exercises</p>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-content>
+        <h3>Calorie Completion</h3>
+        <h2>{{ stats.calorie_completion_rate.toFixed(0) }}%</h2>
+        <p>{{ stats.total_calories_consumed }} / {{ stats.total_calories_target }} kcal</p>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-top: 30px;">
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Exercise Completion Rate</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <ngx-charts-line-chart
+          [view]="chartOptions.view"
+          [results]="exerciseChartData"
+          [scheme]="chartOptions.colorScheme"
+          [xAxis]="true"
+          [yAxis]="true"
+          [showXAxisLabel]="true"
+          [showYAxisLabel]="true"
+          [xAxisLabel]="'Day'"
+          [yAxisLabel]="'Completion Rate (%)'"
+          [animations]="true"
+          [yScaleMax]="100">
+        </ngx-charts-line-chart>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Calorie Tracking</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <ngx-charts-line-chart
+          [view]="chartOptions.view"
+          [results]="caloriesChartData"
+          [scheme]="chartOptions.colorScheme"
+          [xAxis]="true"
+          [yAxis]="true"
+          [showXAxisLabel]="true"
+          [showYAxisLabel]="true"
+          [xAxisLabel]="'Day'"
+          [yAxisLabel]="'Calories'"
+          [animations]="true">
+        </ngx-charts-line-chart>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+
