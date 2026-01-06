@@ -4,6 +4,8 @@ import { FitnessService } from '../../services/fitness.service';
 import { AuthService } from '../../services/auth.service';
 import { User } from '../../models/user.model';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Observable, of, throwError } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
 
 @Component({
   selector: 'app-profile',
@@ -69,25 +71,41 @@ export class ProfileComponent implements OnInit {
     });
   }
 
-  saveProfile(): void {
+  saveProfile(): Observable<any> {
     if (this.profileForm.invalid) {
-      return;
+      return of(null);
     }
 
     this.saving = true;
-    this.fitnessService.updateProfile(this.profileForm.value).subscribe({
-      next: () => {
+    return this.fitnessService.updateProfile(this.profileForm.value).pipe(
+      tap(() => {
         this.snackBar.open('Profile updated successfully!', 'Close', { duration: 3000 });
         this.saving = false;
-      },
-      error: (error) => {
+        this.profileForm.markAsPristine();
+      }),
+      catchError((error) => {
         this.snackBar.open('Failed to update profile', 'Close', { duration: 5000 });
         this.saving = false;
+        return throwError(error);
+      })
+    );
+  }
+
+  regeneratePlans(): void {
+    const saveIfNeeded$ = this.profileForm.dirty ? this.saveProfile() : of(null);
+
+    saveIfNeeded$.subscribe({
+      next: () => {
+        this.doRegenerate();
+      },
+      error: () => {
+        // Save failed, but still try to regenerate with current DB values
+        this.doRegenerate();
       }
     });
   }
 
-  regeneratePlans(): void {
+  private doRegenerate(): void {
     this.regenerating = true;
     this.fitnessService.regeneratePlans().subscribe({
       next: () => {

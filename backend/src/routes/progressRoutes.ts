@@ -1,4 +1,5 @@
 import express from 'express';
+import { Response } from 'express';
 import pool from '../config/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -6,7 +7,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 const router = express.Router();
 
 // Get progress data (aggregated from workout_meal_plans)
-router.get('/', authenticateToken, asyncHandler(async (req: AuthRequest, res) => {
+router.get('/', authenticateToken, asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   // Get all plans for the user
@@ -19,9 +20,9 @@ router.get('/', authenticateToken, asyncHandler(async (req: AuthRequest, res) =>
   
   // Calculate progress metrics
   const progressData = plans.map(plan => {
-    const exercises = JSON.parse(plan.exercises);
-    const meals = JSON.parse(plan.meals);
-    const completedStatus = JSON.parse(plan.completed_status || '{"exercises": [], "meals": []}');
+    const exercises = typeof plan.exercises === 'string' ? JSON.parse(plan.exercises) : plan.exercises;
+    const meals = typeof plan.meals === 'string' ? JSON.parse(plan.meals) : plan.meals;
+    const completedStatus = typeof plan.completed_status === 'string' ? JSON.parse(plan.completed_status || '{"exercises": [], "meals": []}') : plan.completed_status || { exercises: [], meals: [] };
 
     const completedExercises = exercises.filter((ex: any) => completedStatus.exercises?.includes(ex.id) || ex.completed).length;
     const totalExercises = exercises.length;
@@ -49,7 +50,7 @@ router.get('/', authenticateToken, asyncHandler(async (req: AuthRequest, res) =>
 }));
 
 // Get user stats (weight, goal, etc.)
-router.get('/stats', authenticateToken, asyncHandler(async (req: AuthRequest, res) => {
+router.get('/stats', authenticateToken, asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   const [userRows] = await pool.execute(
@@ -79,9 +80,9 @@ router.get('/stats', authenticateToken, asyncHandler(async (req: AuthRequest, re
   let totalCaloriesTarget = 0;
 
   plans.forEach(plan => {
-    const exercises = JSON.parse(plan.exercises);
-    const meals = JSON.parse(plan.meals);
-    const completedStatus = JSON.parse(plan.completed_status || '{"exercises": [], "meals": []}');
+    const exercises = typeof plan.exercises === 'string' ? JSON.parse(plan.exercises) : plan.exercises;
+    const meals = typeof plan.meals === 'string' ? JSON.parse(plan.meals) : plan.meals;
+    const completedStatus = typeof plan.completed_status === 'string' ? JSON.parse(plan.completed_status || '{"exercises": [], "meals": []}') : plan.completed_status || { exercises: [], meals: [] };
 
     totalExercises += exercises.length;
     totalExercisesCompleted += exercises.filter((ex: any) => 

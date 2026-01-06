@@ -6,7 +6,14 @@
   <h1>Workout Routines</h1>
   <p>Your personalized weekly workout plan</p>
 
-  <div style="display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap;">
+  <div *ngIf="plans.length === 0" style="text-align: center; padding: 40px;">
+    <mat-icon style="font-size: 64px; width: 64px; height: 64px; color: #ccc;">fitness_center</mat-icon>
+    <h2>No Workout Plans</h2>
+    <p>Please complete your profile and regenerate your plans to get personalized workouts.</p>
+    <button mat-raised-button color="primary" routerLink="/profile">Go to Profile</button>
+  </div>
+
+  <div *ngIf="plans.length > 0">
     <button
       *ngFor="let day of weekDays"
       mat-raised-button
@@ -24,7 +31,7 @@
     <mat-card-header>
       <mat-card-title>{{ selectedDay }}'s Workout</mat-card-title>
       <mat-card-subtitle>
-        {{ plan.exercises.filter(e => e.completed).length }} of {{ plan.exercises.length }} exercises completed
+        {{ getCompletedCount(plan) }} of {{ plan.exercises.length }} exercises completed
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -32,10 +39,10 @@
       <p style="text-align: center; margin-top: 10px;">{{ getProgress(plan).toFixed(0) }}% Complete</p>
 
       <div style="margin-top: 30px;">
-        <mat-card *ngFor="let exercise of plan.exercises" style="margin-bottom: 15px; cursor: pointer;" (click)="toggleExercise(exercise)">
+        <mat-card *ngFor="let exercise of plan.exercises" style="margin-bottom: 15px;">
           <mat-card-content>
             <div style="display: flex; align-items: center; gap: 15px;">
-              <mat-checkbox [checked]="exercise.completed" (change)="toggleExercise(exercise)"></mat-checkbox>
+              <mat-checkbox [checked]="exercise.completed" (change)="toggleExercise(exercise, $event)"></mat-checkbox>
               <div style="flex: 1;">
                 <h3 [style.text-decoration]="exercise.completed ? 'line-through' : 'none'">{{ exercise.name }}</h3>
                 <p style="color: #666; margin: 5px 0;">{{ exercise.description }}</p>

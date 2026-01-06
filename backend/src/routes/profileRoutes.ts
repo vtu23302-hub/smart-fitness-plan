@@ -1,4 +1,5 @@
 import express from 'express';
+import { Response } from 'express';
 import pool from '../config/database';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { validateProfile } from '../middleware/validation';
@@ -8,7 +9,7 @@ import { generateWorkoutPlans, generateMealPlans, combineWorkoutAndMealPlans } f
 const router = express.Router();
 
 // Get user profile
-router.get('/', authenticateToken, asyncHandler(async (req: AuthRequest, res) => {
+router.get('/', authenticateToken, asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   const [rows] = await pool.execute(
@@ -26,7 +27,7 @@ router.get('/', authenticateToken, asyncHandler(async (req: AuthRequest, res) =>
 }));
 
 // Update user profile
-router.put('/', authenticateToken, validateProfile, asyncHandler(async (req: AuthRequest, res) => {
+router.put('/', authenticateToken, validateProfile, asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
   const { name, age, gender, height, weight, goal } = req.body;
 
@@ -45,7 +46,7 @@ router.put('/', authenticateToken, validateProfile, asyncHandler(async (req: Aut
 }));
 
 // Regenerate workout and meal plans
-router.post('/regenerate-plans', authenticateToken, asyncHandler(async (req: AuthRequest, res) => {
+router.post('/regenerate-plans', authenticateToken, asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
   // Get user profile for plan generation

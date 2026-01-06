@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { FitnessService } from '../../services/fitness.service';
 import { DailyPlan, Exercise } from '../../models/user.model';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -17,7 +17,8 @@ export class WorkoutRoutineComponent implements OnInit {
 
   constructor(
     private fitnessService: FitnessService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private changeDetectorRef: ChangeDetectorRef
   ) { }
 
   ngOnInit(): void {
@@ -26,14 +27,41 @@ export class WorkoutRoutineComponent implements OnInit {
 
   loadPlans(): void {
     this.loading = true;
-    this.fitnessService.getPlans().subscribe({
-      next: (plans) => {
-        this.plans = plans;
-        this.loading = false;
+    this.changeDetectorRef.markForCheck();
+    
+    // First check if user has a complete profile
+    this.fitnessService.getProfile().subscribe({
+      next: (profile) => {
+        if (!profile.goal) {
+          this.snackBar.open('Please complete your profile first to generate personalized plans', 'Close', { duration: 5000 });
+          this.loading = false;
+          this.changeDetectorRef.markForCheck();
+          return;
+        }
+        
+        // Profile is complete, load plans
+        this.fitnessService.getPlans().subscribe({
+          next: (plans) => {
+            this.plans = plans;
+            this.loading = false;
+            this.changeDetectorRef.markForCheck();
+            
+            // If no plans exist, show message to generate them
+            if (plans.length === 0) {
+              this.snackBar.open('No workout plans found. Please regenerate your plans from the Profile page.', 'Close', { duration: 5000 });
+            }
+          },
+          error: (error) => {
+            this.snackBar.open('Failed to load workout plans', 'Close', { duration: 5000 });
+            this.loading = false;
+            this.changeDetectorRef.markForCheck();
+          }
+        });
       },
       error: (error) => {
-        this.snackBar.open('Failed to load workout plans', 'Close', { duration: 5000 });
+        this.snackBar.open('Failed to load profile', 'Close', { duration: 5000 });
         this.loading = false;
+        this.changeDetectorRef.markForCheck();
       }
     });
   }
@@ -42,24 +70,17 @@ export class WorkoutRoutineComponent implements OnInit {
     return this.plans.find(p => p.day === this.selectedDay);
   }
 
-  toggleExercise(exercise: Exercise): void {
+  toggleExercise(exercise: Exercise, event?: any): void {
     const plan = this.getSelectedPlan();
     if (!plan) return;
 
-    exercise.completed = !exercise.completed;
-
-    // Update completed status
-    if (!plan.completed_status) {
-      plan.completed_status = { exercises: [], meals: [] };
-    }
-
-    if (exercise.completed) {
-      if (!plan.completed_status.exercises.includes(exercise.id)) {
-        plan.completed_status.exercises.push(exercise.id);
-      }
+    if (event) {
+      exercise.completed = event.checked;
     } else {
-      plan.completed_status.exercises = plan.completed_status.exercises.filter(id => id !== exercise.id);
+      exercise.completed = !exercise.completed;
     }
+
+    this.changeDetectorRef.markForCheck();
 
     this.fitnessService.updatePlan(plan.day, plan.exercises, plan.meals).subscribe({
       next: () => {
@@ -70,7 +91,13 @@ export class WorkoutRoutineComponent implements OnInit {
       },
       error: (error) => {
         this.snackBar.open('Failed to update exercise', 'Close', { duration: 5000 });
-        this.loadPlans(); // Revert
+        // Revert
+        if (event) {
+          exercise.completed = !event.checked;
+        } else {
+          exercise.completed = !exercise.completed;
+        }
+        this.changeDetectorRef.markForCheck();
       }
     });
   }
@@ -79,6 +106,11 @@ export class WorkoutRoutineComponent implements OnInit {
     if (!plan || plan.exercises.length === 0) return 0;
     const completed = plan.exercises.filter(e => e.completed).length;
     return (completed / plan.exercises.length) * 100;
+  }
+
+  getCompletedCount(plan: DailyPlan | undefined): number {
+    if (!plan) return 0;
+    return plan.exercises.filter(e => e.completed).length;
   }
 
   isDayComplete(day: string): boolean {

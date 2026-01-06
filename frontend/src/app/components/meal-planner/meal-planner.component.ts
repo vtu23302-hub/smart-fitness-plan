@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { FitnessService } from '../../services/fitness.service';
 import { DailyPlan, Meal } from '../../models/user.model';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -25,7 +25,8 @@ export class MealPlannerComponent implements OnInit {
 
   constructor(
     private fitnessService: FitnessService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private changeDetectorRef: ChangeDetectorRef
   ) { }
 
   ngOnInit(): void {
@@ -34,14 +35,41 @@ export class MealPlannerComponent implements OnInit {
 
   loadPlans(): void {
     this.loading = true;
-    this.fitnessService.getPlans().subscribe({
-      next: (plans) => {
-        this.plans = plans;
-        this.loading = false;
+    this.changeDetectorRef.markForCheck();
+    
+    // First check if user has a complete profile
+    this.fitnessService.getProfile().subscribe({
+      next: (profile) => {
+        if (!profile.goal) {
+          this.snackBar.open('Please complete your profile first to generate personalized plans', 'Close', { duration: 5000 });
+          this.loading = false;
+          this.changeDetectorRef.markForCheck();
+          return;
+        }
+        
+        // Profile is complete, load plans
+        this.fitnessService.getPlans().subscribe({
+          next: (plans) => {
+            this.plans = plans;
+            this.loading = false;
+            this.changeDetectorRef.markForCheck();
+            
+            // If no plans exist, show message to generate them
+            if (plans.length === 0) {
+              this.snackBar.open('No meal plans found. Please regenerate your plans from the Profile page.', 'Close', { duration: 5000 });
+            }
+          },
+          error: (error) => {
+            this.snackBar.open('Failed to load meal plans', 'Close', { duration: 5000 });
+            this.loading = false;
+            this.changeDetectorRef.markForCheck();
+          }
+        });
       },
       error: (error) => {
-        this.snackBar.open('Failed to load meal plans', 'Close', { duration: 5000 });
+        this.snackBar.open('Failed to load profile', 'Close', { duration: 5000 });
         this.loading = false;
+        this.changeDetectorRef.markForCheck();
       }
     });
   }
@@ -55,6 +83,7 @@ export class MealPlannerComponent implements OnInit {
     if (!plan) return;
 
     meal.consumed = !meal.consumed;
+    this.changeDetectorRef.markForCheck();
 
     // Update completed status
     if (!plan.completed_status) {
